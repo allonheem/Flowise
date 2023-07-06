@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { BaseCallbackHandler } from 'langchain/callbacks'
 import { Server } from 'socket.io'
+import { ChainValues } from 'langchain/dist/schema'
 
 export const numberOrExpressionRegex = '^(\\d+\\.?\\d*|{{.*}})$' //return true if string consists only numbers OR expression {{}}
 export const notEmptyRegex = '(.|\\s)*\\S(.|\\s)*' //return true if string is not empty or blank
@@ -17,6 +18,7 @@ export const notEmptyRegex = '(.|\\s)*\\S(.|\\s)*' //return true if string is no
  */
 export const getBaseClasses = (targetClass: any) => {
     const baseClasses: string[] = []
+    const skipClassNames = ['BaseLangChain', 'Serializable']
 
     if (targetClass instanceof Function) {
         let baseClass = targetClass
@@ -25,7 +27,7 @@ export const getBaseClasses = (targetClass: any) => {
             const newBaseClass = Object.getPrototypeOf(baseClass)
             if (newBaseClass && newBaseClass !== Object && newBaseClass.name) {
                 baseClass = newBaseClass
-                baseClasses.push(baseClass.name)
+                if (!skipClassNames.includes(baseClass.name)) baseClasses.push(baseClass.name)
             } else {
                 break
             }
@@ -131,7 +133,7 @@ export const getInputVariables = (paramValue: string): string[] => {
     const variableStack = []
     const inputVariables = []
     let startIdx = 0
-    const endIdx = returnVal.length - 1
+    const endIdx = returnVal.length
 
     while (startIdx < endIdx) {
         const substr = returnVal.substring(startIdx, startIdx + 1)
@@ -208,12 +210,14 @@ export class CustomChainHandler extends BaseCallbackHandler {
     socketIO: Server
     socketIOClientId = ''
     skipK = 0 // Skip streaming for first K numbers of handleLLMStart
+    returnSourceDocuments = false
 
-    constructor(socketIO: Server, socketIOClientId: string, skipK?: number) {
+    constructor(socketIO: Server, socketIOClientId: string, skipK?: number, returnSourceDocuments?: boolean) {
         super()
         this.socketIO = socketIO
         this.socketIOClientId = socketIOClientId
         this.skipK = skipK ?? this.skipK
+        this.returnSourceDocuments = returnSourceDocuments ?? this.returnSourceDocuments
     }
 
     handleLLMStart() {
@@ -233,4 +237,38 @@ export class CustomChainHandler extends BaseCallbackHandler {
     handleLLMEnd() {
         this.socketIO.to(this.socketIOClientId).emit('end')
     }
+
+    handleChainEnd(outputs: ChainValues): void | Promise<void> {
+        if (this.returnSourceDocuments) {
+            this.socketIO.to(this.socketIOClientId).emit('sourceDocuments', outputs?.sourceDocuments)
+        }
+    }
 }
+
+export const availableDependencies = [
+    '@dqbd/tiktoken',
+    '@getzep/zep-js',
+    '@huggingface/inference',
+    '@pinecone-database/pinecone',
+    '@supabase/supabase-js',
+    'axios',
+    'cheerio',
+    'chromadb',
+    'cohere-ai',
+    'd3-dsv',
+    'form-data',
+    'graphql',
+    'html-to-text',
+    'langchain',
+    'linkifyjs',
+    'mammoth',
+    'moment',
+    'node-fetch',
+    'pdf-parse',
+    'pdfjs-dist',
+    'playwright',
+    'puppeteer',
+    'srt-parser-2',
+    'typeorm',
+    'weaviate-ts-client'
+]
